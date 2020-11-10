@@ -1,0 +1,5 @@
+using stable rustc
+
+https://buildroot.org 用到 buildroot.config
+
+参考的是spike(与spike兼容)，virtio参考的是tinyemu
