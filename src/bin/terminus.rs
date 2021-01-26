@@ -86,18 +86,32 @@ fn main() {
             .default_value("a, c, d, f, i, m, s, u")
         )
         .arg(
-            Arg::with_name("elf")
+            Arg::with_name("elf1")
                 .index(1)
                 .required(true)
-                .value_name("ELF_FILE")
+                .value_name("ELF_FILE1")
                 .validator(|path| {
                     if Path::new(path.as_str()).exists() {
                         Ok(())
                     } else {
-                        Err(format!("{} not exists!", path))
+                        Err(format!("elf1: {} not exists!", path))
                     }
                 })
-                .help("elf file path")
+                .help("elf file1 path")
+        )
+        .arg(
+            Arg::with_name("elf2")
+                .index(2)
+                .required(false)
+                .value_name("ELF_FILE2")
+                .validator(|path| {
+                    if Path::new(path.as_str()).exists() {
+                        Ok(())
+                    } else {
+                        Err(format!("elf2: {} not exists!", path))
+                    }
+                })
+                .help("elf file2 path")
         )
         .arg(
             Arg::with_name("boot_args")
@@ -246,9 +260,19 @@ fn main() {
         })
         .collect::<Vec<char>>()
         .into_boxed_slice();
-    let elf = Path::new(matches.value_of("elf").unwrap())
+    let elf1 = Path::new(matches.value_of("elf1").unwrap())
         .to_str()
         .unwrap();
+
+    let elf2;
+    if let Some(felf2) = matches.value_of("elf2") {
+         elf2= Path::new(felf2)
+            .to_str()
+            .unwrap();
+    } else {
+        elf2 = "";
+    }
+
     let boot_args = matches
         .values_of("boot_args")
         .unwrap_or_default()
@@ -299,7 +323,7 @@ fn main() {
         };
         core_num
     ];
-    let mut sys = System::new("sys", elf, TIMER_FREQ, 32);
+    let mut sys = System::new("sys", (elf1,elf2), TIMER_FREQ, 32);
     sys.register_htif(!virtio_input_en);
     for cfg in configs {
         sys.new_processor(cfg)
@@ -402,7 +426,8 @@ fn main() {
 
     sys.make_boot_rom(0x20000000, -1i64 as u64, boot_args)
         .unwrap();
-    sys.load_elf().unwrap();
+    sys.load_elf(&sys.elfs.0).unwrap();
+    sys.load_elf(&sys.elfs.1).unwrap();
     sys.reset(vec![-1i64 as u64; core_num]).unwrap();
     #[cfg(feature = "sdl")]
     let mut real_timer = if display_en {

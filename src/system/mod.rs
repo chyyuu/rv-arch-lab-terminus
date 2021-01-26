@@ -59,22 +59,23 @@ pub struct System {
     bus: Rc<Bus>,
     timer: Rc<Timer>,
     intc: Rc<Intc>,
-    elf: ElfLoader,
+    pub elfs: (ElfLoader,ElfLoader),
     processors: Vec<Processor>,
     virtio_infos: Vec<VirtIOInfo>,
     ext_fdt_prop: HashMap<String, Vec<FdtProp>>,
 }
 
 impl System {
-    pub fn new(name: &str, elf_file: &str, timer_freq: usize, max_int_src: usize) -> System {
+    pub fn new(name: &str, elf_files: (&str, &str), timer_freq: usize, max_int_src: usize) -> System {
         let bus = Rc::new(Bus::new());
-        let elf = ElfLoader::new(elf_file).expect(&format!("Invalid Elf {}", elf_file));
+        let elf1 = ElfLoader::new(elf_files.0).expect(&format!("Invalid Elf1 {}", elf_files.0));
+        let elf2 = ElfLoader::new(elf_files.1).expect(&format!("Invalid Elf2 {}", elf_files.1));
         let sys = System {
             name: name.to_string(),
             bus,
             timer: Rc::new(Timer::new(timer_freq)),
             intc: Rc::new(Intc::new(max_int_src)),
-            elf,
+            elfs:(elf1,elf2),
             processors: vec![],
             virtio_infos: vec![],
             ext_fdt_prop: HashMap::new(),
@@ -117,7 +118,7 @@ impl System {
     }
 
     pub fn register_htif(&self, input_en: bool) {
-        if let Some((base, tohost, fromhost)) = self.elf.htif_section().expect("Invalid ELF!") {
+        if let Some((base, tohost, fromhost)) = self.elfs.0.htif_section().expect("Invalid ELF!") {
             self.register_region(
                 "htif",
                 base,
@@ -252,8 +253,8 @@ impl System {
         }
     }
 
-    pub fn load_elf(&self) -> Result<()> {
-        match self.elf.load(|addr, data| {
+    pub fn load_elf(&self, elf:&ElfLoader) -> Result<()> {
+        match elf.load(|addr, data| {
             fn load(space: &Space, addr: u64, data: &[u8]) -> std::result::Result<(), String> {
                 if data.is_empty() {
                     Ok(())
@@ -465,7 +466,7 @@ impl System {
 
     pub fn make_boot_rom(&mut self, base: u64, entry: u64, boot_args: Vec<&str>) -> Result<()> {
         let start_address = if entry == -1i64 as u64 {
-            self.elf.entry_point().unwrap()
+            self.elfs.0.entry_point().unwrap()
         } else {
             entry
         };
@@ -507,7 +508,7 @@ impl System {
         }
         self.timer.reset();
         let boot_rom = self.bus.space().get_region("boot_rom");
-        let entry_point = self.elf.entry_point().unwrap();
+        let entry_point = self.elfs.0.entry_point().unwrap();
         for (i, p) in self.processors().iter_mut().enumerate() {
             if let Err(msg) = if reset_vecs[i] == -1i64 as u64 {
                 if let Some(ref boot_rom) = boot_rom {
